@@ -1,7 +1,7 @@
 ---
 MXNET_VERSION: ""
 output_path: "./output/fgfa_rfcn/imagenet_vid"
-symbol: resnet_v1_101_flownet_rfcn
+symbol: resnet_v1_101_flownet_rfcn_online_train
 gpus: '0'#'0,1,2,3'
 CLASS_AGNOSTIC: true
 SCALES:
@@ -61,7 +61,7 @@ TRAIN:
   warmup: false
   begin_epoch: 0
   end_epoch: 2
-  model_prefix: 'fgfa_rfcn_vid'
+  model_prefix: 'rfcn_fgfa_flownet_vid_original'
   # whether resume training
   RESUME: false
   # whether flip image

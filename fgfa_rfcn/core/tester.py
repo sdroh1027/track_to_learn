@@ -168,98 +168,6 @@ def im_detect(predictor, data_batch, data_names, scales, cfg):
         pred_boxes_all.append(pred_boxes)
     return zip(scores_all, pred_boxes_all, data_dict_all)
 
-def roi_crop_embed(img_height, img_width, pred_boxes, cur_embed, cfg):
-    # using cur_embed & bbox_pred, make new instance wise embed layer
-    # bbox_pred[4:8] has (x1,y1) (x2,y2) coordinates
-
-    scale_h = cur_embed.shape[2] / img_height
-    scale_w = cur_embed.shape[3] / img_width
-
-    zeros = np.zeros([300, 1])
-    pred_boxes_on_feat = np.zeros([300, 4])
-    pred_boxes_on_feat[:, 0] = pred_boxes[:, 4] * scale_w  # x1
-    pred_boxes_on_feat[:, 1] = pred_boxes[:, 5] * scale_h  # y1
-    pred_boxes_on_feat[:, 2] = pred_boxes[:, 6] * scale_w  # x2
-    pred_boxes_on_feat[:, 3] = pred_boxes[:, 7] * scale_h  # y2
-    pred_boxes_on_feat = clip_boxes(pred_boxes_on_feat, cur_embed.shape[-2:])
-    pred_boxes_on_feat = np.hstack((zeros, pred_boxes_on_feat[:, 0:]))
-    pred_boxes_on_feat = mx.nd.array(pred_boxes_on_feat, mx.gpu())
-
-    bbox = mx.sym.Variable('bbox_with_delta')
-    cur_embed = mx.sym.Variable('cur_embed')
-    new_embed = mx.sym.ROIPooling(data=cur_embed, rois=bbox, pooled_size=(cfg.TEST.EMBED_SIZE, cfg.TEST.EMBED_SIZE),
-                                  spatial_scale=1.0, name='new_embed')
-    new_embed_normalized = mx.sym.L2Normalization(data=new_embed, mode='channel', name='new_embed_normalized')
-    ex = new_embed_normalized.bind(mx.gpu(), {'cur_embed': cur_embed, 'bbox_with_delta': pred_boxes_on_feat})
-    cropped_embed = ex.forward()
-
-    return cropped_embed
-
-def im_detect_all(predictor, data_batch, data_names, scales, cfg):
-    output_all = predictor.predict(data_batch)
-    data_dict_all = [dict(zip(data_names, data_batch.data[i])) for i in xrange(len(data_batch.data))]
-    scores_all = []
-    pred_boxes_all = []
-    iscores_all = [] # instance box prediction
-    ipred_boxes_all = [] # instance box prediction
-    rois_all = []
-    #cur_embeds_all = [] #
-    #new_embeds_all = [] #
-    #sliced_all = [] #
-    cropped_embeds_all = []
-    for output, data_dict, scale in zip(output_all, data_dict_all, scales):
-        if cfg.TEST.HAS_RPN:
-            rois = output['rois_output'].asnumpy()[:, 1:]
-        else:
-            rois = data_dict['rois'].asnumpy().reshape((-1, 5))[:, 1:]
-        im_shape = data_dict['data'].shape
-
-        # save output
-        scores = output['cls_prob_reshape_output'].asnumpy()[0]
-        bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[0]
-        iscores = output['inst_prob_reshape_output'].asnumpy()[0]
-        ibbox_deltas = output['ibbox_pred_reshape_output'].asnumpy()[0]
-        cur_embed = output['cur_embed_output']
-        #unnormalize_weight = output['unnormalize_weight_output']
-        #new_embed = output['new_embed_output'].asnumpy()[0]
-        #sliced = output['sliced_bbox_output'].asnumpy()[0]
-
-        # post processing
-        pred_boxes = bbox_pred(rois, bbox_deltas)
-        pred_boxes = clip_boxes(pred_boxes, im_shape[-2:]) # Clip boxes to image boundaries.
-        ipred_boxes = bbox_pred(rois, ibbox_deltas)
-        ipred_boxes = clip_boxes(ipred_boxes, im_shape[-2:])
-
-        # for cropping, scale pred boxes to size of embed feature
-        img_height =data_batch.data[0][1][0][0].asnumpy()
-        img_width =data_batch.data[0][1][0][1].asnumpy()
-        cropped_embed = roi_crop_embed(img_height, img_width, pred_boxes, cur_embed, cfg)
-        cropped_embed = cropped_embed[0].asnumpy()
-
-        # we used scaled image & roi to train, so it is necessary to transform them back
-        pred_boxes = pred_boxes / scale
-        ipred_boxes = ipred_boxes / scale
-
-        scores_all.append(scores)
-        pred_boxes_all.append(pred_boxes)
-        iscores_all.append(iscores)
-        ipred_boxes_all.append(ipred_boxes)
-        rois_all.append(rois)
-        #cur_embeds_all.append(cur_embed)
-        #new_embeds_all.append(new_embed)
-        #sliced_all.append(sliced)
-        cropped_embeds_all.append(cropped_embed)
-
-        debug = 0
-        if debug is True:
-            cur_embed = cur_embed.asnumpy()[0]
-            feat_cache = output['feat_cache'].asnumpy()[0]
-            #plot_tensor(cur_embed, 16)
-            #plot_tensor(feat_cache, 16)
-
-    return zip(scores_all, pred_boxes_all, rois_all, data_dict_all, iscores_all, ipred_boxes_all, cropped_embeds_all)
-
-
 def im_batch_detect(predictor, data_batch, data_names, scales, cfg):
     output_all = predictor.predict(data_batch)
 
@@ -387,7 +295,7 @@ def pred_eval(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg, vi
                 data_list.append(image)
                 feat_list.append(feat)
                 prepare_data(data_list, feat_list, data_batch)
-                pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg)
+                pred_result = im_detect(aggr_predictors, data_batch, data_names, scales, cfg) #it returns zip(scores_all, pred_boxes_all, rois_all, data_dict_all, iscores_all, ipred_boxes_all, cropped_embeds_all)
 
                 roidb_offset += 1
                 frame_ids[idx] = roidb_frame_ids[roidb_idx] + roidb_offset
@@ -508,8 +416,6 @@ def pred_eval_multiprocess(gpu_num, key_predictors, cur_predictors, test_datas, 
     if logger:
         logger.info('evaluate detections: \n{}'.format(info_str))
 
-
-
 def vis_all_detection(im_array, detections, class_names, scale, cfg, threshold=0.1):
     """
     visualize all detections in one image
@@ -575,74 +481,6 @@ def draw_all_detection(im_array, detections, class_names, scale, cfg, threshold=
                         color=color_white, fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5)
     return im
 
-def draw_all_instances(im_array, inst_mem_now, inst_mem, class_names, scale, cfg, threshold=0.1): # sidong
-    """
-    visualize all detections in one image
-    :param im_array: [b=1 c h w] in rgb
-    :param inst_mem_now: local instance array
-    :param inst_mem: global instance array
-    :param class_names: list of names in imdb
-    :param scale: visualize the scaled image
-    :param IDs: linked  global IDs of local instances. tuple.
-    :return:
-    """
-    import cv2
-    import random
-    color_white = (255, 255, 255)
-    im = image.transform_inverse(im_array, cfg.network.PIXEL_MEANS)
-    # change to bgr
-    im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
-    for j, inst in enumerate(inst_mem_now):
-        if inst.cls == 0: # '__background__':
-            continue
-        if len(inst.linked_to) == 0:
-            continue
-        ID = inst.linked_to  # note that this is tuple.
-        if not inst_mem[ID[0]].color:
-            inst_mem[ID[0]].color = (random.randint(0, 256), random.randint(0, 256), random.randint(0, 256))  # generate a random color
-        bbox = inst.bbox[:4] * scale
-        cls = inst.cls
-        score = inst.cls_score
-        #if score < threshold:
-        #    continue
-        bbox = map(int, bbox)
-        cv2.rectangle(im, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color=inst_mem[ID[0]].color, thickness=2)
-        cv2.putText(im, 'LID:%d, %s %.2f, GID:%s, %s, dc:%.2f' % (inst.LID, class_names[cls], score, ID, class_names[inst_mem[ID[0]].cls_high], inst_mem[ID[0]].cls_score_decayed), (bbox[0], bbox[1] + 10),
-                    color=color_white, fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5)
-    return im
-
-def draw_all_rois(im_array, rois, scale, cfg, threshold=0.1): # sidong
-    """
-    visualize all detections in one image
-    :param im_array: [b=1 c h w] in rgb
-    :param detections: [ numpy.ndarray([[x1 y1 x2 y2 score]]) for j in classes ]
-    :param class_names: list of names in imdb
-    :param scale: visualize the scaled image
-    :return:
-    """
-    import cv2
-    import random
-    color_white = (255, 255, 255)
-    im = image.transform_inverse(im_array, cfg.network.PIXEL_MEANS)
-    # change to bgr
-    im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
-
-
-    color = (random.randint(0, 256), random.randint(0, 256), random.randint(0, 256))  # generate a random color
-
-    #print rois
-    for det in rois:
-        bbox = det[:4] #* scale # scaling is not needed for rois
-        #score = det[-1]
-        #if score < threshold:
-        #    continue
-        bbox = map(int, bbox)
-        cv2.rectangle(im, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color=color, thickness=2)
-        #cv2.putText(im, '%s %.3f' % (class_names[j], score), (bbox[0], bbox[1] + 10),
-        #            color=color_white, fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5)
-        cv2.putText(im, '%s' % ('rois'), (bbox[0], bbox[1] + 10),
-                    color=color_white, fontFace=cv2.FONT_HERSHEY_COMPLEX, fontScale=0.5)
-    return im
 
 def prepare_data(data_list, feat_list, data_batch):
     concat_feat = mx.ndarray.concatenate(list(feat_list), axis=0)
@@ -679,4 +517,3 @@ def process_pred_result(pred_result, imdb, thresh, cfg, nms, all_boxes, idx, max
         if vis:
             boxes_this_image = [[]] + [all_boxes[j][idx + delta] for j in range(1, imdb.num_classes)]
             vis_all_detection(center_image, boxes_this_image, imdb.classes, scales[delta], cfg)
-
