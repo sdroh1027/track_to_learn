@@ -1196,7 +1196,7 @@ class resnet_v1_101_flownet_rfcn_online_train(Symbol):
         #new_embed = mx.sym.Reshape(data=new_embed, shape=(-1, 2048, 5 * 5))
 
         # group output
-        group = mx.sym.Group([data_cur, rois, cls_prob, bbox_pred, inst_prob, ibbox_pred, cur_embed, unnormalize_weight]) #, new_embed])
+        group = mx.sym.Group([data_cur, rois, cls_prob, bbox_pred, inst_prob, ibbox_pred, cur_embed, unnormalize_weight, psroipooled_cls_rois]) #, new_embed])
         self.sym = group
         return group
 

@@ -9,72 +9,73 @@ import logging
 logger = logging.getLogger("lgr")
 class Instance:
     global logger
-    def __init__(self, GID = None, LID=None, frame_idx = None, cls = None, cls_score = None , bbox = None,  embed_feat = None):
+    def __init__(self, GID = None, LID=None, frame_idx = None, cls = None, cls_score = None , bbox = None,  embed_feat = None, atten = None):
         assert frame_idx >= 0
         self.GID = GID # it means its global ID (only 1L tuple)
         self.LID = LID
         self.cls = cls
         self.cls_score = cls_score
-        self.cls_score_decayed = cls_score
+        self.cls_score_reliable = cls_score
         self.cls_high = cls
         self.cls_score_high = cls_score
         self.bbox = bbox
         self.embed_feat = embed_feat
+        self.atten = atten
         self.detected_idx = [frame_idx]
         self.color = None
         self.hard_case = False
         self.linked_to = [] # for local inst, it means linked global IDs (can be multiple)
         self.make_second_bbox()
+        self.l_suppressed = []
 
-    def update_1(self, frame_idx, cls_score, bbox, bbox2, center, embed_feat):
+    def update_manual(self, frame_idx, cls_score, bbox, embed_feat, atten):
         self.cls_score = cls_score
         self.bbox = bbox
-        self.center = center
-        self.bbox2 = bbox2
+        self.make_second_bbox() # center, bbox2 created
         self.embed_feat = embed_feat
+        self.atten = atten
         self.detected_idx.append(frame_idx)
 
-    def update(self, new_inst = None):
+    def update_from_inst(self, new_inst = None):
         self.cls = new_inst.cls
         self.cls_score = new_inst.cls_score
         self.bbox = new_inst.bbox
         self.center = new_inst.center
         self.bbox2 = new_inst.bbox2
         self.embed_feat = new_inst.embed_feat
+        self.atten = new_inst.atten
         self.detected_idx.append(new_inst.detected_idx[-1])
         print 'new_inst added'
 
     def update_intra_frame(self, new_inst=None):
         if new_inst.cls_score > self.cls_score:
-            self.cls_high = new_inst.cls
-            self.cls_score_high = new_inst.cls_score
             self.cls = new_inst.cls
             self.cls_score = new_inst.cls_score
-            self.cls_score_decayed = new_inst.cls_score_decayed
             self.bbox = new_inst.bbox
             self.center = new_inst.center
             self.bbox2 = new_inst.bbox2
             self.embed_feat = new_inst.embed_feat
+            self.atten = new_inst.atten
             self.detected_idx.append(new_inst.detected_idx[-1])
             logger.debug('changed to new_inst because of higher cls_score')
         else:
              logger.debug('inst not changed because of lower cls_score')
 
-    def update_inter_frame2(self, new_inst=None, coeff=None):
-        self.cls_score_decayed = coeff * self.cls_score
-        if new_inst.cls_score > self.cls_score_decayed:
-            self.cls = new_inst.cls
-            self.cls_score = new_inst.cls_score
-            logger.debug('new score win. update class and score with new one')
-        else:
-            self.cls_score = self.cls_score_decayed
-            logger.debug('decayed cls_score(%d) win. cls_score is just decayed' % self.cls_score_decayed)
+    def update_inter_frame(self, new_inst=None, sim=None):
+        self.cls_score_reliable = sim * self.cls_score_reliable
+        if new_inst.cls_score > self.cls_score_reliable:
+            self.cls_score_reliable = new_inst.cls_score
+        self.LID = new_inst.LID
+        self.cls = new_inst.cls
+        self.cls_score = new_inst.cls_score
         self.bbox = new_inst.bbox
         self.center = new_inst.center
         self.bbox2 = new_inst.bbox2
         self.make_second_bbox() # make center
         self.embed_feat = new_inst.embed_feat
+        self.atten = new_inst.atten
         self.detected_idx.append(new_inst.detected_idx[-1])
+        self.sim = sim
         # give linked global IDs to local inst
         new_inst.linked_to.append(self.GID)
 
@@ -101,9 +102,15 @@ class Instance:
 
     def make_global_inst(self, GID):
         assert GID is not None
-        ginst = Instance(GID=GID, LID=self.LID, frame_idx=self.detected_idx[-1], cls=self.cls, cls_score=self.cls_score , bbox =self.bbox,  embed_feat=self.embed_feat)
-        ginst.GID = GID
+        ginst = Instance(GID=GID, LID=self.LID, frame_idx=self.detected_idx[-1], cls=self.cls, cls_score=self.cls_score,
+                         bbox=self.bbox, embed_feat=self.embed_feat, atten=self.atten)
         ginst.make_second_bbox()
+        ginst.g_suppressed = []
+        ginst.linked_to_LID = None
+        ginst.sim = 1
+        ginst.cls_high = self.cls
+        ginst.cls_score_high = self.cls_score
+        ginst.cls_score_reliable = self.cls_score
         return ginst
 
 def init_inst_params(inst_mem, GID_prev, ginst_ID_now, max_inst, aggr_predictors, arg_params):

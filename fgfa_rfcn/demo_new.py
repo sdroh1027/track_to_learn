@@ -40,7 +40,7 @@ from nms.nms import py_nms_wrapper, cpu_nms_wrapper, gpu_nms_wrapper
 
 # sidong
 from core.instance import init_inst_params
-from core.tester_online import im_detect_all, process_pred_result_ot
+from core.tester_online import im_detect_all, process_link_pred_result
 import logging
 logger = logging.getLogger("lgr")
 logger.setLevel(logging.DEBUG) #INFO
@@ -88,16 +88,18 @@ def main():
 
     # load demo data
 
-    snippet_name = 'ILSVRC2015_val_00016002/'# 'ILSVRC2015_val_00044006/' #'ILSVRC2015_val_00007010/' #'ILSVRC2015_val_00016002/'
+    snippet_name = 'ILSVRC2015_val_00007016'#'ILSVRC2015_val_00000004' # 'ILSVRC2015_val_00007016'# 'ILSVRC2015_val_00044006' #'ILSVRC2015_val_00007010' #'ILSVRC2015_val_00016002'
     image_names = glob.glob(cur_path + '/../demo/' + snippet_name + '/*.JPEG')
     image_names.sort()
     output_dir = cur_path + '/../demo/test_'# rfcn_fgfa_online_train_'
     output_dir_roi = cur_path + '/../demo/test_rois_'  # rfcn_fgfa_online_train_'
+    output_dir_linst = cur_path + '/../demo/test_linst_'
     if (cfg.TEST.SEQ_NMS):
         output_dir += 'SEQ_NMS_'
         output_dir_roi += 'SEQ_NMS_'
-    output_dir += snippet_name
-    output_dir_roi += snippet_name
+    output_dir += snippet_name + '/'
+    output_dir_roi += snippet_name + '/'
+    output_dir_linst += snippet_name + '/'
 
     data = []
     for im_name in image_names:
@@ -157,6 +159,8 @@ def main():
     scales = [data_batch.data[i][1].asnumpy()[0, 2] for i in xrange(len(data_batch.data))]
     all_boxes = [[[] for _ in range(len(data))]
                  for _ in range(num_classes)]
+    all_boxes_inst = [[[] for _ in range(len(data))]
+                 for _ in range(num_classes)]
 
     ginst_mem = [] # list for instance class
     sim_array_global = [] # similarity array list
@@ -172,7 +176,7 @@ def main():
 
     vis = True
     file_idx = 0
-    thresh = 1e-3
+    thresh = (1e-3) * 5
     for idx, element in enumerate(data):
 
         data_batch = mx.io.DataBatch(data=[element], label=[], pad=0, index=idx,
@@ -207,8 +211,8 @@ def main():
                 data_batch.provide_data[0][-1] = ('feat_cache', None)
 
                 ginst_ID_prev = ginst_ID
-                ginst_ID, out_im, out_im2 = process_pred_result_ot(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes,
-                                                    file_idx, max_per_image, vis,
+                ginst_ID, out_im, out_im2, out_im_linst = process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes,
+                                                    all_boxes_inst, file_idx, max_per_image, vis,
                                                     data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales, ginst_mem, sim_array_global, ginst_ID)
                 #out_im2 = process_pred_result_rois(pred_result, cfg.TEST.RPN_NMS_THRESH, cfg, nms, all_rois, file_idx, max_per_image,
                 #                    data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales)
@@ -219,7 +223,7 @@ def main():
                 if (cfg.TEST.SEQ_NMS==False):
                     save_image(output_dir, file_idx, out_im)
                     save_image(output_dir_roi, file_idx, out_im2)
-
+                    save_image(output_dir_linst, file_idx, out_im_linst)
                 #testing by metric
 
 
@@ -239,8 +243,8 @@ def main():
                 pred_result = im_detect_all(aggr_predictors, data_batch, data_names, scales, cfg)
 
                 ginst_ID_prev = ginst_ID
-                ginst_ID, out_im, out_im2 = process_pred_result_ot(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes,
-                                                      file_idx, max_per_image, vis,
+                ginst_ID, out_im, out_im2, out_im_linst = process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms, all_boxes,
+                                                      all_boxes_inst, file_idx, max_per_image, vis,
                                                       data_list[cfg.TEST.KEY_FRAME_INTERVAL].asnumpy(), scales,
                                                       ginst_mem, sim_array_global, ginst_ID)
                 # out_im2 = process_pred_result_rois(pred_result, cfg.TEST.RPN_NMS_THRESH, cfg, nms, all_rois, file_idx, max_per_image,
@@ -252,6 +256,7 @@ def main():
                 if (cfg.TEST.SEQ_NMS == False):
                     save_image(output_dir, file_idx, out_im)
                     save_image(output_dir_roi, file_idx, out_im2)
+                    save_image(output_dir_linst, file_idx, out_im_linst)
                 print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time / (file_idx+1))
                 file_idx += 1
                 end_counter += 1

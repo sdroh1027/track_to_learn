@@ -140,8 +140,9 @@ TEST:
 
   NUM_INSTANCES: 8
   EMBED_SIZE: 8
-  COEFF_THRESH_INTER: 0.7
+  COEFF_THRESH_INTER: 0.5
   COEFF_THRESH_INTRA: 0.7
   IOU_THRESH_INTER: 0.5
   IOU_THRESH_INTRA: 0.5
-  SCORE_THRESH: 0.3 # min score required to be a new global instance
+  SCORE_THRESH: 0.25 # min score required to be a new global instance
+  REL_THRESH_INTRA: 0.05
