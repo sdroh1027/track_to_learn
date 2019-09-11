@@ -88,17 +88,18 @@ def main():
 
     # load demo data
 
-    snippet_name = 'ILSVRC2015_val_00007016'#'ILSVRC2015_val_00000004' # 'ILSVRC2015_val_00007016'# 'ILSVRC2015_val_00044006' #'ILSVRC2015_val_00007010' #'ILSVRC2015_val_00016002'
+    snippet_name = 'ILSVRC2015_val_00006004' #'ILSVRC2015_val_00007016'#'ILSVRC2015_val_00000004' # 'ILSVRC2015_val_00007016'# 'ILSVRC2015_val_00044006' #'ILSVRC2015_val_00007010' #'ILSVRC2015_val_00016002'
+    # ILSVRC2015_val_00010001: zebra, 37002:cat and fox
     image_names = glob.glob(cur_path + '/../demo/' + snippet_name + '/*.JPEG')
     image_names.sort()
     output_dir = cur_path + '/../demo/test_'# rfcn_fgfa_online_train_'
-    output_dir_roi = cur_path + '/../demo/test_rois_'  # rfcn_fgfa_online_train_'
+    output_dir_ginst = cur_path + '/../demo/test_ginst_'  # rfcn_fgfa_online_train_'
     output_dir_linst = cur_path + '/../demo/test_linst_'
     if (cfg.TEST.SEQ_NMS):
         output_dir += 'SEQ_NMS_'
-        output_dir_roi += 'SEQ_NMS_'
+        output_dir_ginst += 'SEQ_NMS_'
     output_dir += snippet_name + '/'
-    output_dir_roi += snippet_name + '/'
+    output_dir_ginst += snippet_name + '/'
     output_dir_linst += snippet_name + '/'
 
     data = []
@@ -176,7 +177,7 @@ def main():
 
     vis = True
     file_idx = 0
-    thresh = (1e-3) * 5
+    thresh = (1e-3) * 10
     for idx, element in enumerate(data):
 
         data_batch = mx.io.DataBatch(data=[element], label=[], pad=0, index=idx,
@@ -221,9 +222,12 @@ def main():
 
                 total_time = time.time()-t1
                 if (cfg.TEST.SEQ_NMS==False):
-                    save_image(output_dir, file_idx, out_im)
-                    save_image(output_dir_roi, file_idx, out_im2)
-                    save_image(output_dir_linst, file_idx, out_im_linst)
+                    if cfg.TEST.DISPLAY[0]:
+                        save_image(output_dir, file_idx, out_im)
+                    if cfg.TEST.DISPLAY[1]:
+                        save_image(output_dir_ginst, file_idx, out_im2)
+                    if cfg.TEST.DISPLAY[2]:
+                        save_image(output_dir_linst, file_idx, out_im_linst)
                 #testing by metric
 
 
@@ -254,9 +258,12 @@ def main():
 
                 total_time = time.time() - t1
                 if (cfg.TEST.SEQ_NMS == False):
-                    save_image(output_dir, file_idx, out_im)
-                    save_image(output_dir_roi, file_idx, out_im2)
-                    save_image(output_dir_linst, file_idx, out_im_linst)
+                    if cfg.TEST.DISPLAY[0]:
+                        save_image(output_dir, file_idx, out_im)
+                    if cfg.TEST.DISPLAY[1]:
+                        save_image(output_dir_ginst, file_idx, out_im2)
+                    if cfg.TEST.DISPLAY[2]:
+                        save_image(output_dir_linst, file_idx, out_im_linst)
                 print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time / (file_idx+1))
                 file_idx += 1
                 end_counter += 1
