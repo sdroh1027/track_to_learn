@@ -144,8 +144,10 @@ TEST:
   COEFF_THRESH_INTRA: 0.6
   IOU_THRESH_INTER: 0.5
   IOU_THRESH_INTRA: 0.5
-  SCORE_THRESH: 0.2 # min score required to be a new global instance
+  SCORE_THRESH: 0.15 # min score required to be a new global instance
   REL_THRESH_INTRA: 0.05
   DIST_THRESH_INTRA: 0.3
-  GINST_LIFE_FRAME: 29
+  GINST_LIFE_FRAME: 14
   DISPLAY: (1,1,1)
+  LSUP: 0
+  GSUP: 0

@@ -232,15 +232,15 @@ def pred_eval_ot(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg,
                 data_time += t1
                 net_time += t2
                 post_time += t3
-                print 'testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s #ginst:{}'.format(idx, num_images,
+                print 'testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s GID:{} #GInsts:{}'.format(idx, num_images,
                                                                                       data_time / idx * test_data.batch_size,
                                                                                       net_time / idx * test_data.batch_size,
-                                                                                      post_time / idx * test_data.batch_size, ginst_ID)
+                                                                                      post_time / idx * test_data.batch_size, ginst_ID, len(ginst_mem))
                 if logger:
-                    logger.info('testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s #ginst:{}'.format(idx, num_images,
+                    logger.info('testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s GID:{} #GInsts:{}'.format(idx, num_images,
                                                                                              data_time / idx * test_data.batch_size,
                                                                                              net_time / idx * test_data.batch_size,
-                                                                                             post_time / idx * test_data.batch_size, ginst_ID))
+                                                                                             post_time / idx * test_data.batch_size, ginst_ID, len(ginst_mem)))
         #################################################
         # end part of a video                           #
         #################################################
@@ -271,15 +271,15 @@ def pred_eval_ot(gpu_id, feat_predictors, aggr_predictors, test_data, imdb, cfg,
                 net_time += t2
                 post_time += t3
 
-                print 'testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s #ginst:{}'.format(idx, num_images,
+                print 'testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s GID:{} #GInsts:{}'.format(idx, num_images,
                                                                                    data_time / idx * test_data.batch_size,
                                                                                    net_time / idx * test_data.batch_size,
-                                                                                   post_time / idx * test_data.batch_size, ginst_ID)
+                                                                                   post_time / idx * test_data.batch_size, ginst_ID, len(ginst_mem))
                 if logger:
-                    logger.info('testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s #ginst:{}'.format(idx, num_images,
+                    logger.info('testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s GID:{} #GInsts:{}'.format(idx, num_images,
                                                                                              data_time / idx * test_data.batch_size,
                                                                                              net_time / idx * test_data.batch_size,
-                                                                                             post_time / idx * test_data.batch_size, ginst_ID))
+                                                                                             post_time / idx * test_data.batch_size, ginst_ID, len(ginst_mem)))
                 end_counter += 1
 
     with open(det_file, 'wb') as f:
@@ -479,9 +479,8 @@ def process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms
                 all_boxes[j][idx + delta] = cls_dets[keep, :]
                 per_cls_box_idx_nms.append(indexes[keep])
 
-        # intra frame supression (class wise)
+        inst_mem_cls = [[] for _ in range(num_classes)]  ## intra-class inst memory
         for j in range(1, num_classes):
-            inst_mem_cls = [[] for _ in range(num_classes)] ## intra-class inst memory
             box_indexes = per_cls_box_idx_nms[j]
             for i, box_idx in enumerate(box_indexes): # for dets of class j,
                 box = all_boxes[j][idx + delta][i]
@@ -489,47 +488,12 @@ def process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms
                                     bbox=box[0:4],  embed_feat=embed_feat[box_idx],
                                     atten=psroipooled_cls_rois[box_idx]) #make instances for outputs
                 local_inst_ID += 1
-                is_new = 1
-                if not inst_mem_cls[j]:  # if inst mem is empty,
-                    logger.debug('[%dth frame, %s(%d)] %dth box(LID:%d, %.3f) is added as a new inst in cinst_memory' % (
-                    idx + delta, classes[j], j, i, new_inst.LID, new_inst.cls_score))
-                    inst_mem_cls[j].append(new_inst)
-                else:  # if local mem is not empty, comparte candidate box with local mem
-                    for k, inst in enumerate(inst_mem_cls[j]):
-                        coeff = compare_embed(inst.embed_feat, new_inst.embed_feat)  # input embed_feat <type 'tuple'>: (2048, 8,8)
-                        coeff_th = (coeff > cfg.TEST.COEFF_THRESH_INTER)
-                        iou = compute_IOU(inst.bbox,new_inst.bbox)
-                        dist = compute_dist(inst, new_inst)
-                        dist_th = (dist > cfg.TEST.DIST_THRESH_INTRA)
-                        iou_th = (iou > cfg.TEST.IOU_THRESH_INTRA)
-                        similar = iou * coeff
-                        similar_th = (similar > cfg.TEST.COEFF_THRESH_INTRA * cfg.TEST.IOU_THRESH_INTRA)
-                        logger.debug( '[%dth frame, %.5s(%d)] %dth box(LID:%d, %.3f) VS cinst_mem[%d](LID:%d, %.3f) (dis:%.3f(%.1s), IOU:%.3f(%.1s), coef:%.3f(%.1s), sim:%.3f(%.1s))' % (
-                            idx + delta, classes[j], j, i, new_inst.LID, new_inst.cls_score, k, inst.LID, inst.cls_score, dist, dist_th, iou, iou_th, coeff, coeff_th, similar, similar_th))
-                        if similar_th:  # when simillar
-                            is_new -= 1
-                            #inst.update_intra_frame(new_inst)
-                            if new_inst.cls_score > inst.cls_score:
-                                inst_mem_cls[j][k] = new_inst
-                        elif not similar_th: # when not similar
-                            continue
-                        else:  # if sim is Nan or something
-                            logger.error('[%dth frame, %.5s(%d)] error: sim value(%.3f) is not normal' % (idx + delta, classes[j], j, similar))
-                            raise NotImplementedError
-
-                    if int(is_new) is 1:
-                        logger.debug('[%dth frame, %.5s(%d)] %dth box(LID:%d, %.3f) is added as a new inst in cinst_memory' % (
-                            idx + delta, classes[j], j, i, new_inst.LID, new_inst.cls_score))
-                        inst_mem_cls[j].append(new_inst)
-                    else:
-                        logger.debug('[%dth frame, %.5s(%d)] %dth box(LID:%d, %.3f) is not a new inst' % (
-                            idx + delta, classes[j], j, i, new_inst.LID, new_inst.cls_score))
-
+                inst_mem_cls[j].append(new_inst)
             inst_mem_now.extend(inst_mem_cls[j])
 
         sim_array_final = np.zeros((1,len(inst_mem_now)))
         sim_array_final_th = np.zeros((1,len(inst_mem_now)), int)
-
+        g_linked = []
         #logger.debug('[%dth frame] @@@ inter frame phase start @@@', idx + delta)
         if len(inst_mem) > 0 and len(inst_mem_now) > 0 :
             iou_array = np.zeros((len(inst_mem), len(inst_mem_now)))  # matrix of iou
@@ -537,6 +501,7 @@ def process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms
             sim_array = np.zeros((len(inst_mem), len(inst_mem_now)))  # matrix of similarity
             g_rel_array = np.zeros((len(inst_mem), len(inst_mem_now)))  # matrix of reliability
             l_rel_array = np.zeros((len(inst_mem), len(inst_mem_now))) # matrix of reliability g to l
+            dist_array = np.zeros((len(inst_mem), len(inst_mem_now))) # matrix of relative distance
             # Similarity matrix generation (global <-> local inst)
             for i, ginst in enumerate(inst_mem):  # loop for instances in this frame
                 for j, linst in enumerate(inst_mem_now):
@@ -545,6 +510,7 @@ def process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms
                     similar = coeff * iou
                     g_reliability = similar * ginst.cls_score_reliable
                     l_reliability = similar * linst.cls_score * (ginst.cls_high == linst.cls)
+                    dist = compute_dist(ginst, linst)
                     coeff_th = (coeff > cfg.TEST.COEFF_THRESH_INTER)
                     iou_th = (iou > cfg.TEST.IOU_THRESH_INTRA)
                     similar_th = (similar > cfg.TEST.IOU_THRESH_INTRA * cfg.TEST.COEFF_THRESH_INTRA)
@@ -553,139 +519,138 @@ def process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms
                     coef_array[i, j] = coeff
                     g_rel_array[i, j] = g_reliability
                     l_rel_array[i, j] = l_reliability
-                    logger.debug('[%dth frame] ginst[%d](GID:%d, %.5s(%.3f) lastf:%d)) VS linst[%d](LID:%d, %.5s(%.3f)): IOU:%.3f(%.1s) coef:%.3f(%.1s) sim:%.3f(%.1s) lrel:%.3f' % (
+                    dist_array[i, j] = dist
+                    logger.debug('[%dth frame] ginst[%d](GID:%d, %.5s(%.2f) lastf:%d)) VS linst[%d](LID:%d, %.5s(%.2f)): loc:%.2f IOU:%.2f(%.1s) coef:%.2f(%.1s) sim:%.2f(%.1s) lrel:%.2f' % (
                         idx + delta, i, ginst.GID, classes[ginst.cls], ginst.cls_score, ginst.detected_idx[-1], j, linst.LID, classes[linst.cls], linst.cls_score,
-                        iou, iou_th, coeff, coeff_th, similar, similar_th, l_reliability))
+                        dist, iou, iou_th, coeff, coeff_th, similar, similar_th, l_reliability))
 
             sim_array_th = (sim_array[:, :] > cfg.TEST.COEFF_THRESH_INTRA * cfg.TEST.IOU_THRESH_INTRA)
             g_rel_array_th = (g_rel_array[:, :] > cfg.TEST.REL_THRESH_INTRA)
             l_rel_array_th = (l_rel_array[:, :] > cfg.TEST.REL_THRESH_INTRA)
             #sim_array_global.append(sim_array) #for debugging
 
-            # ginst linking & ginst guided linst supression
-            sim_array2 = sim_array.copy()
-            sim_array2_th = sim_array_th.copy() * int(1) # bool to int
-            g_rel_array2 = g_rel_array.copy()
-            g_rel_array2_th = g_rel_array_th.copy()
-            l_rel_array2 = l_rel_array.copy()
             link_array = np.zeros((len(inst_mem), len(inst_mem_now)))
+            sim_array_tmp = sim_array.copy()
+            l_rel_array_tmp = l_rel_array.copy()
+            sim_array_hor = sim_array.copy()
+            l_rel_array_hor = l_rel_array.copy()
+            sim_array_ver = sim_array.copy()
+            l_rel_array_ver = l_rel_array.copy()
 
-            for i, ginst in enumerate(inst_mem):
-                if ginst.g_suppressed:
-                    continue
-                lindex_over_th_sim = np.where(sim_array_th[i, :] == True)[0]
-                lindex_over_th_lrel = np.where(l_rel_array_th[i, :] == True)[0]
-                survive_idx = None
-                gcls = ginst.cls_high
-                same_cls_index_list = [] # find same class indexes
-                same_cls_sim_list = [] #find same class sims
-                same_cls_score_list = []  # find same class scores
-                same_cls_grel_list = []  # find same class sims
-                same_cls_lrel_list = []  # find same class sims
-                for k, linst in enumerate(inst_mem_now):
-                    if gcls == linst.cls:
-                        same_cls_index_list.append(k)
-                        same_cls_sim_list.append(sim_array[i, k])
-                        same_cls_score_list.append(linst.cls_score)
-                        same_cls_grel_list.append(g_rel_array[i, k])
-                        same_cls_lrel_list.append(l_rel_array[i, k])
+            # ginst linking
+            while l_rel_array_tmp.max() > cfg.TEST.REL_THRESH_INTRA:
+                i = l_rel_array_tmp.argmax()
+                gi = i / len(inst_mem_now)
+                li = i % len(inst_mem_now)
+                link_array[gi, li] = 1
+                sim_array_tmp[gi, :] = -1
+                sim_array_tmp[:, li] = -1
+                l_rel_array_tmp[gi, :] = -1
+                l_rel_array_tmp[:, li] = -1
+                sim_array_hor[gi, :] = -1
+                sim_array_ver[:, li] = -1
+                l_rel_array_hor[gi, :] = -1
+                l_rel_array_ver[:, li] = -1
+                g_linked.append(gi)
+                inst_mem[gi].update_inter_frame(inst_mem_now[li], sim_array[gi,li])
 
-                if same_cls_index_list:
-                    if len(lindex_over_th_lrel) > 0:
-                        #survive_idx = same_cls_index_list[same_cls_sim_list.index(max(same_cls_sim_list))]
-                        candidates = lindex_over_th_lrel
-                        survive_idx = same_cls_index_list[same_cls_lrel_list.index(max(same_cls_lrel_list))]
-                    elif len(lindex_over_th_sim) > 0:
-                        candidates = lindex_over_th_sim
-                        survive_idx = np.argmax(sim_array[i])
+            while sim_array_tmp.max() > cfg.TEST.IOU_THRESH_INTER * cfg.TEST.COEFF_THRESH_INTER:
+                i = sim_array_tmp.argmax()
+                gi = i / len(inst_mem_now)
+                li = i % len(inst_mem_now)
+                link_array[gi, li] = 2
+                sim_array_tmp[gi, :] = -2
+                sim_array_tmp[:, li] = -2
+                l_rel_array_tmp[gi, :] = -2
+                l_rel_array_tmp[:, li] = -2
+                sim_array_hor[gi, :] = -2
+                sim_array_ver[:, li] = -2
+                l_rel_array_hor[gi, :] = -2
+                l_rel_array_ver[:, li] = -2
+                g_linked.append(gi)
+                inst_mem[gi].update_inter_frame(inst_mem_now[li], sim_array[gi, li])
 
-                if survive_idx is not None:
-                    link_array[i, survive_idx] = 1
-                    ginst.linked_to_LID = inst_mem_now[survive_idx].LID
-                    lindex_to_suppress = np.setdiff1d(candidates[:], survive_idx)
-                    sim_array2[:, lindex_to_suppress] = -1
-                    sim_array2_th[:, lindex_to_suppress] = -1
-                    g_rel_array2[:, lindex_to_suppress] = -1
-                    g_rel_array2_th[:, lindex_to_suppress] = -1
-                    for k in lindex_to_suppress:
-                        inst_mem_now[k].l_suppressed.append(idx + delta)
+            l_rel_array_ver_th = (l_rel_array_ver[:, :] > cfg.TEST.REL_THRESH_INTRA)
+            l_rel_array_hor_th = (l_rel_array_hor[:, :] > cfg.TEST.REL_THRESH_INTRA)
 
-            #linst guided ginst suppresion
-            sim_array3 = sim_array2.copy()
-            sim_array3_th = sim_array2_th.copy() * int(1) # bool to int
-            rel_array3 = g_rel_array2.copy()
-            rel_array3_th = g_rel_array2_th.copy()
-            for i, linst in enumerate(inst_mem_now):
-                if linst.l_suppressed:  # if not suppressed, suppress others
-                    continue
-                #gindex_over_th = np.where(sim_array2_th[:, i] == True)[0]
-                gindex_over_th = np.where(g_rel_array2_th[:, i] == True)[0]
-                if len(gindex_over_th) > 0:
-                    survive = gindex_over_th.min() #oldest ginst survives
-                    gindex_to_suppress = np.setdiff1d(gindex_over_th, survive) #others are suppressed
-                    sim_array3[gindex_to_suppress, :] = -2
-                    sim_array3_th[gindex_to_suppress, :] = -2
-                    rel_array3[gindex_to_suppress, :] = -2
-                    rel_array3_th[gindex_to_suppress, :] = -2
-                    for k in gindex_to_suppress:
-                        inst_mem[k].g_suppressed.append(idx + delta)
+            # ginst guided linst supression (for not linked)
+            if cfg.TEST.LSUP:
+                for i, ginst in enumerate(inst_mem):
+                    if link_array[i, :].max() > 0:
+                        lindex_to_suppress = np.where(l_rel_array_ver_th[i, :] == True)[0]
+                        sim_array_tmp[:, lindex_to_suppress] = -3
+                        for k in lindex_to_suppress:
+                            inst_mem_now[k].l_suppressed.append(idx + delta)
+            # linst guided ginst suppresion (for not linked)
+            if cfg.TEST.GSUP:
+                for j, linst in enumerate(inst_mem_now):
+                    if link_array[:, j].max() > 0:
+                        gindex_to_suppress = np.where(l_rel_array_hor_th[:, j] == True)[0]
+                        sim_array_tmp[gindex_to_suppress, :] = -4
+                        for k in gindex_to_suppress:
+                            inst_mem[k].g_suppressed.append(idx + delta)
 
-            sim_array_final = sim_array3.copy()
-            sim_array_final_th = sim_array3_th.copy()
-            rel_array_final = sim_array3.copy()
-            rel_array_final_th = sim_array3_th.copy()
+            sim_array_final = sim_array.copy()
+            sim_array_final_th = sim_array_th.copy()
+            rel_array_final = l_rel_array.copy()
+            rel_array_final_th = l_rel_array_th.copy()
             linked_array = link_array.copy()
 
             # delete some ginsts
+            gidx_to_delete = []
             for i, ginst in enumerate(inst_mem):
+                delete = 0
                 if ginst.detected_idx[-1] < (idx + delta - cfg.TEST.GINST_LIFE_FRAME):
                     logger.debug('[%dth frame] ginst[%d](GID:%d, %s, %.3f, frame:%d) is deleted (old frame)' % (
                         idx + delta, i, inst_mem[i].GID, classes[inst_mem[i].cls], inst_mem[i].cls_score,
                         inst_mem[i].detected_idx[-1]))
-                    del inst_mem[i]
-                    sim_array_final, sim_array_final_th, rel_array_final, rel_array_final_th, linked_array = \
-                        np.delete((sim_array_final,sim_array_final_th, rel_array_final, rel_array_final_th, linked_array),
-                                  (i), axis=1)
-                if ginst.g_suppressed:
+                    delete = 1
+                elif ginst.g_suppressed:
                     logger.debug('[%dth frame] ginst[%d](GID:%d, %s, %.3f, frame:%d) is deleted (suppressed)' % (
                         idx + delta, i, inst_mem[i].GID, classes[inst_mem[i].cls], inst_mem[i].cls_score,
                         inst_mem[i].detected_idx[-1]))
-                    del inst_mem[i] #TODO: elimination code must be written
-                    sim_array_final, sim_array_final_th, rel_array_final, rel_array_final_th, linked_array = \
-                        np.delete((sim_array_final, sim_array_final_th, rel_array_final, rel_array_final_th, linked_array),
-                                  (i), axis=1)
+                    delete = 1
+                elif ginst.cls_score_reliable < 0.05 and ginst.detected_idx[-1] == idx + delta:
+                    logger.debug('[%dth frame] ginst[%d](GID:%d, %s, %.3f, frame:%d) is deleted (low reliability)' % (
+                        idx + delta, i, inst_mem[i].GID, classes[inst_mem[i].cls], inst_mem[i].cls_score,
+                        inst_mem[i].detected_idx[-1]))
+                    delete = 1
+                    g_linked.remove(i)
+                if delete == 1:
+                    gidx_to_delete.append(i)
+
+            gidx_to_delete.reverse()
+            for i in gidx_to_delete:
+                del inst_mem[i]
+            sim_array_final, sim_array_final_th, rel_array_final, rel_array_final_th, linked_array = \
+                np.delete(
+                    (sim_array_final, sim_array_final_th, rel_array_final, rel_array_final_th, linked_array),
+                    (gidx_to_delete), axis=1)
 
 
             # link global insts & local insts
-            #index_max_sim = np.zeros(len(inst_mem), dtype=int)
-            #index_max_rel = np.zeros(len(inst_mem), dtype=int)
             for i, ginst in enumerate(inst_mem):
-                #index_max_sim[i] = np.argmax(sim_array_final[i])
-                #index_max_rel[i] = np.argmax(rel_array_final[i])
-                indexes_linked = np.argwhere(linked_array[i] == 1)
-                assert len(indexes_linked) >= 0
+                indexes_linked = np.argwhere(linked_array[i] >= 1)
                 if len(indexes_linked) == 0:
-                    continue
-                elif len(indexes_linked) > 1:
-                    raise NotImplementedError # this should not happen
-                index_linked = int(indexes_linked[0])
-                linst = inst_mem_now[index_linked] ##TODO: change this
-                max_sim = sim_array_final[i][index_linked]
-                if max_sim >= (cfg.TEST.IOU_THRESH_INTER * cfg.TEST.COEFF_THRESH_INTER):
-                    #inst_mem_now[sim_max_index[i]].linked_to.append(ginst.GID)
+                    logger.debug('[%dth frame] ginst[%d](GID:%d, %s, %.3f, frame:%d) is not linked to anyone' % (
+                        idx + delta, i, inst_mem[i].GID, classes[inst_mem[i].cls], inst_mem[i].cls_score,
+                        inst_mem[i].detected_idx[-1]))
+                elif len(indexes_linked) == 1:
+                    index_linked = int(indexes_linked[0])
+                    linst = inst_mem_now[index_linked]
+                    sim = sim_array_final[i][index_linked]
                     logger.debug(
                         '[%dth frame] ginst[%d](GID:%d, %s, %.3f, frame:%d) is updated by linst[%d](LID:%d, %s, %.3f)' % (
                             idx + delta, i, inst_mem[i].GID, classes[inst_mem[i].cls], inst_mem[i].cls_score,
                             inst_mem[i].detected_idx[-1], index_linked, linst.LID, classes[linst.cls],
                             linst.cls_score))
-                    ginst.update_inter_frame(linst, max_sim)
+                    #ginst.update_inter_frame(linst, sim)
                 else:
-                    logger.debug('[%dth frame] ginst[%d](GID:%d, %s, %.3f, frame:%d) is not linked to anyone' % (
-                        idx + delta, i, inst_mem[i].GID, classes[inst_mem[i].cls], inst_mem[i].cls_score, inst_mem[i].detected_idx[-1]))
+                    logger.debug('# of linked indexes %d' % (len(indexes_linked)))
+                    raise NotImplementedError # this should not happen
 
-            if idx == 39:  # 0.6
-                logger.debug('debug_point')
-
+            #if idx == 39:  # 0.6
+            #    logger.debug('debug_point')
 
         #make new ginst
         list_new_ginsts = []
@@ -695,30 +660,27 @@ def process_link_pred_result(classes, pred_result, num_classes, thresh, cfg, nms
                     logger.debug(
                     '[%dth frame] linst[%d](LID:%d, %s, %.3f) is discarded because of suppression' % (
                         idx + delta, j, linst.LID, classes[linst.cls], linst.cls_score))
-                    continue
                 else:
                     if not len(linst.linked_to):  # for not linked one,
-                        if len(inst_mem) > 0:
-                            a = np.argmax(sim_array_final[:, j])
-                            iou = iou_array[a, j]
-                            if iou > 0.3 and inst_mem[a].detected_idx[-1] == (idx + delta): #if linst overlaps with ginst of this frame
-                                logger.debug(
-                                    '[%dth frame] linst[%d](LID:%d, %s, %.3f) is discarded because of overlap with ginst[%d](iou: %.3f)' % (
-                                        idx + delta, j, linst.LID, classes[linst.cls], linst.cls_score, inst_mem[a].GID, iou))
-                                continue
-
-                        if linst.cls_score > cfg.TEST.SCORE_THRESH:
+                        if linst.cls_score < cfg.TEST.SCORE_THRESH:
+                            logger.debug(
+                                '[%dth frame] linst[%d](LID:%d, %s, %.3f) is discarded because of low cls_score' % (
+                                    idx + delta, j, linst.LID, classes[linst.cls], linst.cls_score))
+                        elif linst.cls_score >= cfg.TEST.SCORE_THRESH:
+                            if len(inst_mem) > 0:
+                                #a = np.argmax(sim_array_final[:, j])
+                                iou = iou_array[g_linked, j].sum()
+                                if iou > 0.5 : #if linst overlaps with linked ginsts of this frame
+                                    logger.debug(
+                                        '[%dth frame] linst[%d](LID:%d, %s, %.3f) is discarded because of overlap(%.2f) with ginsts{g_linked}'.format(g_linked=g_linked)
+                                        % (idx + delta, j, linst.LID, classes[linst.cls], linst.cls_score, iou))
+                                    continue
                             logger.debug('[%dth frame] linst[%d](LID:%d, %s, %.3f) became new ginst_memory[%d]' % (
                                 idx + delta, j, linst.LID, classes[linst.cls], linst.cls_score, ginst_ID))
                             new_ginst = linst.make_global_inst(ginst_ID)
                             list_new_ginsts.append(new_ginst)
                             linst.linked_to = [ginst_ID]
                             ginst_ID = ginst_ID + 1
-
-                        else:
-                            logger.debug(
-                                '[%dth frame] linst[%d](LID:%d, %s, %.3f) is discarded because of low cls_score' % (
-                                    idx + delta, j, linst.LID, classes[linst.cls], linst.cls_score))
 
         inst_mem.extend(list_new_ginsts)
 
