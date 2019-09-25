@@ -100,8 +100,9 @@ def get_predictor_ot(sym, sym_instance, cfg, arg_params, aux_params, test_data, 
     # decide maximum shape
     data_names = [k[0] for k in test_data.provide_data_single]
     label_names = None
+    frames = cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
     max_data_shape = [[('data', (1, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
-                       ('data_cache', (19, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
+                       ('data_cache', (frames, 3, max([v[0] for v in cfg.SCALES]), max([v[1] for v in cfg.SCALES]))),
                        ]]
 
     # create predictor

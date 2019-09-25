@@ -25,8 +25,12 @@ class Instance:
         self.color = None
         self.hard_case = False
         self.linked_to = [] # for local inst, it means linked global IDs (can be multiple)
+        self.linked_to_gidx = None
         self.make_second_bbox()
         self.l_suppressed = []
+
+        self.cls_score_list = []
+        self.cls_list = []
 
     def update_manual(self, frame_idx, cls_score, bbox, embed_feat, atten):
         self.cls_score = cls_score
@@ -62,21 +66,22 @@ class Instance:
              logger.debug('inst not changed because of lower cls_score')
 
     def update_inter_frame(self, new_inst=None, sim=None):
-        self.cls_score_reliable = sim * self.cls_score_reliable
-        if new_inst.cls_score > self.cls_score_reliable:
-            self.cls_score_reliable = new_inst.cls_score
+        self.sim = sim
+        self.cls_score_reliable = max(sim * self.cls_score_reliable, new_inst.cls_score)
         self.LID = new_inst.LID
         self.cls = new_inst.cls
         self.cls_score = new_inst.cls_score
         self.bbox = new_inst.bbox
         self.center = new_inst.center
         self.bbox2 = new_inst.bbox2
-        self.make_second_bbox() # make center
         self.embed_feat = new_inst.embed_feat
         self.atten = new_inst.atten
-        self.detected_idx.append(new_inst.detected_idx[-1])
         self.sim = sim
-        # give linked global IDs to local inst
+        self.detected_idx.append(new_inst.detected_idx[-1])
+        self.cls_list.append(new_inst.cls)
+        self.cls_score_list.append(new_inst.cls_score)
+        self.cls_score_acc += self.cls_score
+        # save linked global IDs to local inst
         new_inst.linked_to.append(self.GID)
 
         if new_inst.cls_score > self.cls_score_high:
@@ -107,10 +112,15 @@ class Instance:
         ginst.make_second_bbox()
         ginst.g_suppressed = []
         ginst.linked_to_LID = None
-        ginst.sim = 1
+        ginst.sim = 0
         ginst.cls_high = self.cls
         ginst.cls_score_high = self.cls_score
         ginst.cls_score_reliable = self.cls_score
+        ginst.cls_score_list = [self.cls_score]
+        ginst.cls_list = [self.cls]
+        ginst.cls_score_acc = self.cls_score
+        # save linked global IDs to local inst
+        self.linked_to.append(self.GID)
         return ginst
 
 def init_inst_params(inst_mem, GID_prev, ginst_ID_now, max_inst, aggr_predictors, arg_params):

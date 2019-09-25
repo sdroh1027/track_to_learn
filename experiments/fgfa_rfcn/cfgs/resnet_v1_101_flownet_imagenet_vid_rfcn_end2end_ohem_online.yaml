@@ -145,15 +145,17 @@ TEST:
   test_epoch: 0
 
   NUM_INSTANCES: 8
-  EMBED_SIZE: 8
+  EMBED_SIZE: 7
   COEFF_THRESH_INTER: 0.5
   COEFF_THRESH_INTRA: 0.6
   IOU_THRESH_INTER: 0.5
   IOU_THRESH_INTRA: 0.5
-  SCORE_THRESH: 0.15 # min score required to be a new global instance
-  REL_THRESH_INTRA: 0.05
+  SCORE_THRESH: 0.1 # min score required to be a new global instance
+  REL_THRESH_INTRA: 0.01
   DIST_THRESH_INTRA: 0.3
-  GINST_LIFE_FRAME: 14
+  GINST_LIFE_FRAME: 9
   DISPLAY: (0,1,1)
-  LSUP: 1
+  LSUP: 0
   GSUP: 1
+
+  KEY_FRAME_INTERVAL: 9 # default is 9

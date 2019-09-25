@@ -110,7 +110,7 @@ def main():
                'whale', 'zebra']
 
     # load demo data
-    snippet_name = 'ILSVRC2015_val_00007016/'#'ILSVRC2015_val_00044006/' #'ILSVRC2015_val_00007010/' #'ILSVRC2015_val_00016002/'
+    snippet_name = 'ILSVRC2015_val_00007010/'#'ILSVRC2015_val_00044006/' #'ILSVRC2015_val_00007010/' #'ILSVRC2015_val_00016002/'
     image_names = glob.glob(cur_path + '/../demo/' + snippet_name +'/*.JPEG')
     image_names.sort()
     output_dir = cur_path + '/../demo/rfcn_fgfa_original_'

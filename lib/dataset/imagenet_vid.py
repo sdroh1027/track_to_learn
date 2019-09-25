@@ -229,6 +229,21 @@ class ImageNetVID(IMDB):
         info = self.do_python_eval_gen()
         return info
 
+    def evaluate_detections_multiprocess_select_idx(self, detections, idx):
+        """
+        top level evaluations
+        :param detections: result matrix, [bbox, confidence]
+        :return: None
+        """
+        # make all these folders for results
+        result_dir = os.path.join(self.result_path, 'results')
+        if not os.path.exists(result_dir):
+            os.mkdir(result_dir)
+
+        self.write_vid_results_multiprocess_select_idx(detections, idx)
+        info = self.do_python_eval_gen()
+        return info
+
     def get_result_file_template(self, gpu_id):
         """
         :return: a string template
@@ -354,6 +369,32 @@ class ImageNetVID(IMDB):
                         for k in range(dets.shape[0]):
                             f.write('{:d} {:d} {:.4f} {:.2f} {:.2f} {:.2f} {:.2f}\n'.
                                     format(frame_ids[im_ind], cls_ind, dets[k, -1],
+                                           dets[k, 0], dets[k, 1], dets[k, 2], dets[k, 3]))
+
+    def write_vid_results_multiprocess_select_idx(self, detections, idx):
+        """
+        write results files in pascal devkit path
+        :param all_boxes: boxes to be processed [bbox, confidence]
+        :return: None
+        """
+        print 'Writing {} ImageNetVID results file'.format('all')
+        filename = self.get_result_file_template().format('all')
+        with open(filename, 'wt') as f:
+            for detection in detections:
+                all_boxes = detection[0]
+                frame_ids = detection[1]
+                for im_ind in range(len(frame_ids)):
+                    for cls_ind, cls in enumerate(self.classes):
+                        if cls == '__background__':
+                            continue
+                        dets = all_boxes[cls_ind][im_ind]
+                        #dets = np.array(dets)
+                        if len(dets) == 0:
+                            continue
+                        # the imagenet expects 0-based indices
+                        for k in range(dets.shape[0]):
+                            f.write('{:d} {:d} {:.4f} {:.2f} {:.2f} {:.2f} {:.2f}\n'.
+                                    format(frame_ids[im_ind], cls_ind, dets[k, idx],
                                            dets[k, 0], dets[k, 1], dets[k, 2], dets[k, 3]))
     
     def do_python_eval(self):

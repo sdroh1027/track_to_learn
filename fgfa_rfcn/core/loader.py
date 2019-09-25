@@ -133,10 +133,11 @@ class TestLoader(mx.io.DataIter):
             self.key_frame_flag = 2
 
         feat_stride = float(self.cfg.network.RCNN_FEAT_STRIDE)
+        frames = self.cfg.TEST.KEY_FRAME_INTERVAL * 2 + 1
         extend_data = [{'data': data[0]['data'] ,
                         'im_info': data[0]['im_info'],
-                        'data_cache': np.zeros((19, 3, max([v[0] for v in self.cfg.SCALES]), max([v[1] for v in self.cfg.SCALES]))),
-                        'feat_cache': np.zeros((19, self.cfg.network.FGFA_FEAT_DIM,
+                        'data_cache': np.zeros((frames, 3, max([v[0] for v in self.cfg.SCALES]), max([v[1] for v in self.cfg.SCALES]))),
+                        'feat_cache': np.zeros((frames, self.cfg.network.FGFA_FEAT_DIM,
                                                 np.ceil(max([v[0] for v in self.cfg.SCALES]) / feat_stride).astype(np.int),
                                                 np.ceil(max([v[1] for v in self.cfg.SCALES]) / feat_stride).astype(np.int)))}]
         self.data = [[mx.nd.array(extend_data[i][name]) for name in self.data_name] for i in xrange(len(data))]

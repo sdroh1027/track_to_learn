@@ -88,8 +88,10 @@ def main():
 
     # load demo data
 
-    snippet_name = 'ILSVRC2015_val_00006004' #'ILSVRC2015_val_00007016'#'ILSVRC2015_val_00000004' # 'ILSVRC2015_val_00007016'# 'ILSVRC2015_val_00044006' #'ILSVRC2015_val_00007010' #'ILSVRC2015_val_00016002'
-    # ILSVRC2015_val_00010001: zebra, 37002:cat and fox
+    snippet_name = 'ILSVRC2015_val_00177001' #'ILSVRC2015_val_00007016'#'ILSVRC2015_val_00000004' # 'ILSVRC2015_val_00007016'# 'ILSVRC2015_val_00044006' #'ILSVRC2015_val_00007010' #'ILSVRC2015_val_00016002'
+    # ILSVRC2015_val_00010001: zebra,
+    # 37002:cat and fox, motion blur
+    # ILSVRC2015_val_00095000: fox, defocus
     image_names = glob.glob(cur_path + '/../demo/' + snippet_name + '/*.JPEG')
     image_names.sort()
     output_dir = cur_path + '/../demo/test_'# rfcn_fgfa_online_train_'
@@ -119,7 +121,7 @@ def main():
 
     # get predictor
 
-    print 'get-predictor'
+    print('get-predictor')
     data_names = ['data', 'im_info', 'data_cache', 'feat_cache']
     label_names = []
 
@@ -177,7 +179,7 @@ def main():
 
     vis = True
     file_idx = 0
-    thresh = (1e-3) * 10
+    thresh = (1e-3)
     for idx, element in enumerate(data):
 
         data_batch = mx.io.DataBatch(data=[element], label=[], pad=0, index=idx,
@@ -193,7 +195,7 @@ def main():
 
             else:
                 #if file_idx ==15:
-                #    print '%d frame' % (file_idx)
+                #    print( '%d frame' % (file_idx))
                 #################################################
                 # main part of the loop
                 #################################################
@@ -231,7 +233,7 @@ def main():
                 #testing by metric
 
 
-                print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time /(file_idx+1))
+                print( 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time /(file_idx+1)))
                 file_idx += 1
         else:
             #################################################
@@ -264,7 +266,7 @@ def main():
                         save_image(output_dir_ginst, file_idx, out_im2)
                     if cfg.TEST.DISPLAY[2]:
                         save_image(output_dir_linst, file_idx, out_im_linst)
-                print 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time / (file_idx+1))
+                print( 'testing {} {:.4f}s'.format(str(file_idx)+'.JPEG', total_time / (file_idx+1)))
                 file_idx += 1
                 end_counter += 1
 
@@ -280,7 +282,7 @@ def main():
             out_im = draw_all_detection(data[idx][0].asnumpy(), boxes_this_image, classes, scales[0], cfg)
             save_image(output_dir, idx, out_im)
 
-    print 'done'
+    print('done')
 
 if __name__ == '__main__':
     main()
